@@ -143,7 +143,7 @@ void ShibataBot::Process() {
 		resultantDiffHeading = 0;
 
 	double correction = pd(resultantDiffHeading, myShip->velAng);
-	thrustDiff = (myShip->velAng - correction);
+	thrustDiff = (myShip->velAng - correction);	// @todo Revisar, -correction parece certo mas não funciona
 	double thrustDiffAbs = abs(thrustDiff);
 
 	if (speedDiffAbs + thrustDiffAbs > 1.) {
@@ -180,7 +180,7 @@ void ShibataBot::Process() {
 	else
 		shootSpeed = 25. / 20.;
 	shootObject.pos = myShip->pos;
-	shootObject.vel = unitDirection * shootSpeed + myShip->vel;
+	shootObject.vel = unitDirection * shootSpeed + myShip->vel + myShip->velAng * 2 * (Eigen::Rotation2D<double>(M_PI_2) * unitDirection);
 	shootObject.radius = .5;
 	Simulation::Collision collision(shootObject, *gamestate);
 	if (collision.exists())

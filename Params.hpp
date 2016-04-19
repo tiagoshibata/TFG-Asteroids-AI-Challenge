@@ -36,8 +36,8 @@
 // #define SIMULATION_END	20.	// max 40 ticks (2s)
 
 
-#define ROTATION_P		(.8 * .4) * 1.3
-#define ROTATION_D		(3.5 * (.8 * .4) * (9.78 / 5. / 20.) / 8. * 100.) * 1.8
+#define ROTATION_P		.2//((.8 * .4) * 1.3)
+#define ROTATION_D		.123//((3.5 * (.8 * .4) * (9.78 / 5. / 20.) / 8. * 100.) * 1.8 / 20)
 #define SIMULATION_END	60.
 #define THRUST_PRIORITY	.3
 #define SPEED_THRUST_GAIN	2.
