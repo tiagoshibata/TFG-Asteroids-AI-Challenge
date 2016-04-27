@@ -41,7 +41,7 @@ int main() {
 	genetic.pConvergence(.999);
 	genetic.pMutation(0.01);
 	genetic.pCrossover(0.6);
-	genetic.scoreFilename("ship_genetic.dat");
+	genetic.scoreFilename("ship_genetic_score.txt");
 	genetic.flushFrequency(1);
 	genetic.evolve();
 	return 0;
