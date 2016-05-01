@@ -9,6 +9,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/text/ocr.hpp>
+#include <string>
 
 int main(int argc, char **argv) {
 	cv::Mat image;
@@ -54,7 +55,11 @@ int main(int argc, char **argv) {
 
 	// Remove extra lines.
 	std::string number_text(out_text.begin(), std::find(out_text.begin(), out_text.end(), '\n'));
-	std::cout << number_text << "\n";
+	int score = std::stoi(number_text);
+	// "-" gets identified as a number sometimes.
+	if (score > 10)
+		score = -(score % 10);
+	std::cout << score << "\n";
 
 	return 0;
 }
