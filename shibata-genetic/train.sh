@@ -35,9 +35,19 @@ done
 sleep $((60 * 2))
 
 for i in {0..7} ; do
+	# Save screen
 	xdotool windowfocus --sync $window[$i]
 	sleep 2
 	scrot -zu "Bot $i - "'%F-%R.png'
 done
 
 killall TopAsteroidsLinux.x86 shibata
+
+score=0
+for f in Bot*.png ; do
+	score=$(($score + `./score_ocr "$f"`))
+	echo $score
+done
+
+mkdir -p score_captures/
+mv Bot* score_captures/
