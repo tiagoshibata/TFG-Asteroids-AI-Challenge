@@ -4,6 +4,7 @@ DBG=-g -O0
 OPTIMIZE=-Ofast -flto
 CXXFLAGS=$(OPTIMIZE)
 CXXFLAGS_DEFAULT=-Wall -Wextra -std=c++11 -Iinclude/
+LDFLAGS=-lm
 
 PREFIX=build
 BINARY=$(PREFIX)/shibata

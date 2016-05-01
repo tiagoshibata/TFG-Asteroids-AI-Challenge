@@ -1,5 +1,6 @@
 #include <ga/GASimpleGA.h>
 #include <ga/GABin2DecGenome.h>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 
@@ -10,23 +11,25 @@ float genetic_objective(GAGenome &);
 int main() {
 	GABin2DecPhenotype map;
 
-	//             COLLISION_TIMESTEP_MULTIPLIER
-	float min[] = {.001,
+	float min[] = {
+	//	ROTATION_P ROTATION_D SIMULATION_END THRUST_PRIORITY SPEED_THRUST_GAIN
+		.1,        .05,       3.,            0.,             1.,
 	//  WALL_MULTIPLIER WALL_INFLUENCE ROCK_MULTIPLIER ROCK_INFLUENCE ROCK_COLLISION_MULTIPLIER
-		1.,             2.,            2000.,           40.,           10000.,
+		5.,             2.,            2000.,          40.,           100.,
 	//  ROCK_COLLISION_INFLUENCE SHIP_MULTIPLIER SHIP_INFLUENCE LASER_MULTIPLIER LASER_INFLUENCE
 	    40.,                     1.,             20.,           10.,             20.,
 	//  LASER_COLLISION_MULTIPLIER LASER_COLLISION_INFLUENCE ATTACK_THRESHOLD
 		1.,                        2.,                       .00001};
 
-	//             COLLISION_TIMESTEP_MULTIPLIER
-	float max[] = {20.,
+	float max[] = {
+	//	ROTATION_P ROTATION_D SIMULATION_END THRUST_PRIORITY SPEED_THRUST_GAIN
+		1.,        .7,        20.,           1.,             2.,
 	//  WALL_MULTIPLIER WALL_INFLUENCE ROCK_MULTIPLIER ROCK_INFLUENCE ROCK_COLLISION_MULTIPLIER
-		500.,           100.,          150000000.,     300.,          150000000.,
+		400.,           100.,          15000000.,      300.,          1500000.,
 	//  ROCK_COLLISION_INFLUENCE SHIP_MULTIPLIER SHIP_INFLUENCE LASER_MULTIPLIER LASER_INFLUENCE
-		400.,                    100000000.,     600.,          150000000.,      5000.,
+		400.,                    1000000.,       1000.,         15000000.,       5000.,
 	//  LASER_COLLISION_MULTIPLIER LASER_COLLISION_INFLUENCE ATTACK_THRESHOLD
-		150000000.,                10000.,                   .1};
+		15000000.,                 10000.,                   1.};
 	for (unsigned int i = 0; i < len(min); i++)
 		map.add(32, min[i], max[i]);
 
@@ -36,7 +39,7 @@ int main() {
 
 	GABin2DecGenome genome(map, genetic_objective, (void *) target);
 	GASimpleGA genetic(genome);
-	genetic.populationSize(5);
+	genetic.populationSize(10);
 	genetic.nConvergence(5);
 	genetic.pConvergence(.999);
 	genetic.pMutation(0.01);
@@ -49,18 +52,28 @@ int main() {
 
 float genetic_objective(GAGenome& raw_genome) {
 	static const std::string parameterNames[] = {
-		"COLLISION_TIMESTEP_MULTIPLIER", "WALL_MULTIPLIER", "WALL_INFLUENCE",
+		"ROTATION_P", "ROTATION_D",
+		"SIMULATION_END",
+		"THRUST_PRIORITY", "SPEED_THRUST_GAIN",
+		"WALL_MULTIPLIER", "WALL_INFLUENCE",
 		"ROCK_MULTIPLIER", "ROCK_INFLUENCE", "ROCK_COLLISION_MULTIPLIER", "ROCK_COLLISION_INFLUENCE",
-		"SHIP_MULTIPLIER", "SHIP_INFLUENCE", "LASER_MULTIPLIER",
-		"LASER_INFLUENCE", "LASER_COLLISION_MULTIPLIER", "LASER_COLLISION_INFLUENCE",
+		"SHIP_MULTIPLIER", "SHIP_INFLUENCE",
+		"LASER_MULTIPLIER", "LASER_INFLUENCE", "LASER_COLLISION_MULTIPLIER", "LASER_COLLISION_INFLUENCE",
 		"ATTACK_THRESHOLD"
 	};
 	GABin2DecGenome& genome = (GABin2DecGenome&) raw_genome;
 
+	std::ofstream file("../Params.hpp");
+	file << "#ifndef _PARAMS_HPP_\n#define _PARAMS_HPP_\n";
+
 	for (unsigned i = 0; i < len(parameterNames); i++) {
-		std::cout << "#define " << parameterNames[i] << ' ' <<  genome.phenotype(i) << '\n';
+		file << "#define " << parameterNames[i] << ' ' <<  genome.phenotype(i) << '\n';
 	}
-	std::cout << "Score: " << std::flush;
+
+	file << "#endif\n";
+	file.close();
+
+	std::cout << "Genetic - Enter score:\n";
 
 	float fitness;
 	std::cin >> fitness;

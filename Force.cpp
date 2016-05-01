@@ -42,7 +42,8 @@ namespace Force {
 			double radiusSubtract = radius * radius - projection.squaredNorm();
 			double ticsToCollide;
 			if (radiusSubtract < 0.)
-				ticsToCollide = 0.;
+				// Won't collide
+				ticsToCollide = 9999999.;
 			else {
 				radiusSubtract = std::sqrt(radiusSubtract);
 				ticsToCollide = ((projection - object).norm() - radiusSubtract) / speed.norm();

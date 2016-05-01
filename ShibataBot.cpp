@@ -159,6 +159,8 @@ void ShibataBot::Process() {
 		for (approachSpeed = 0.; approachSpeed == 0. && possibleShootSpeed < 4.; possibleShootSpeed += 1.25) {
 			approachSpeed = possibleShootSpeed * possibleShootSpeed - tangentSpeed * tangentSpeed;
 		}
+		if (approachSpeed < 0.)
+			approachSpeed = 0.;
 		approachSpeed = std::sqrt(approachSpeed);
 
 		// The loop might exit with approachSpeed = 0 if abs(tangentSpeed) > max. shootSpeed.
