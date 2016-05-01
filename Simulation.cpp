@@ -84,8 +84,6 @@ namespace Simulation {
 			return -1;
 
 		double radiusSum = radius + j.radius;
-		// if ((type == SHOOT && j.type == SHIP) || (type == SHIP && j.type == SHOOT))
-		// 	radiusSum += 3.2;
 		double deltaVDotV = deltaV.dot(deltaV);
 		double d = deltaVDotR * deltaVDotR - deltaVDotV * (deltaR.dot(deltaR) - radiusSum * radiusSum);
 		if ((type == SHOOT && j.type == SHIP) || (type == SHIP && j.type == SHOOT)) {
@@ -107,6 +105,7 @@ namespace Simulation {
 	void Collision::predict(CollisionObject& object,
 		vector<CollisionObject>::iterator it,
 		const vector<CollisionObject>::iterator& end) {
+
 		for (; it != end; ++it) {
 			double deltaT = object.timeToHit(*it);
 			if (deltaT > 0)

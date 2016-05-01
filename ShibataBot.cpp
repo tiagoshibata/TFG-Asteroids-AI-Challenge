@@ -1,4 +1,5 @@
 #include <cmath>
+#include <iostream>
 
 #include "Control.hpp"
 #include "Force.hpp"
@@ -17,14 +18,19 @@ ShibataBot::~ShibataBot() {
 void ShibataBot::Process() {
 	static int shootTimer = 10, ticksFromGoodShoot = 0;
 	Eigen::Vector2d resultantHeading = Eigen::Vector2d::Zero();
+	// Possibly dangerous sources we should aim (lasers, rocks). Will also
+	// influence movement
 	Eigen::Vector2d resultantDanger = Eigen::Vector2d::Zero();
-	Eigen::Vector2d resultantMovement = Eigen::Vector2d::Zero();// Force::Attractive(-myShip->pos, ORIGIN_ATTRACT);
+	// Actions that cause movement (avoid walls, move away from rocks and lasers
+	// that could cause collisions, approach players)
+	Eigen::Vector2d resultantMovement = Eigen::Vector2d::Zero();
 	Eigen::Vector2d unitPosition = myShip->pos.normalized();
 	GameObject* closestShip = NULL;
 
 	shoot = 0;
 
 	double minDistance = 99999999999999.;
+	// search closest ship
 	for (auto ship : gamestate->ships) {
 		if (ship.second->uid != myShip->uid) {
 			double distance = (ship.second->pos - myShip->pos).squaredNorm();
@@ -34,11 +40,15 @@ void ShibataBot::Process() {
 			}
 		}
 	}
+
 	if (unitPosition.dot(myShip->vel) > -0.1)
+		// approaching wall, add repulsive from wall
 		resultantMovement = Force::Repulsive(unitPosition *
 			(gamestate->arenaRadius - myShip->pos.norm() - myShip->radius), WALL_MULTIPLIER, WALL_INFLUENCE);
+
 	if (closestShip != NULL) {
 		Eigen::Vector2d closestShipRelPos = closestShip->pos - myShip->pos;
+		// attractive to closest ship with a limit influence
 		if (minDistance < SHIP_INFLUENCE)
 			resultantMovement += Force::Attractive(closestShipRelPos, SHIP_MULTIPLIER);
 		else
@@ -46,16 +56,26 @@ void ShibataBot::Process() {
 	}
 
 	for (auto laser : gamestate->lasers) {
+		// search hostile lasers (own lasers don't cause damage)
 		if (laser.second->owner != myShip->uid) {
 			Eigen::Vector2d laserApproachSpeed, laserRelativePos;
 			double radius = laser.second->radius + myShip->radius;
 			laserApproachSpeed = laser.second->vel - myShip->vel;
 			laserRelativePos = laser.second->pos - myShip->pos;
-			resultantDanger += Force::Repulsive(laserRelativePos - laserRelativePos.normalized() * radius * .8,
-				LASER_MULTIPLIER, LASER_INFLUENCE);
 
-			Force::Collision collision(laserRelativePos, laserApproachSpeed, radius, LASER_COLLISION_INFLUENCE, laser.second->lifetime);
-			resultantMovement += Force::Attractive(collision, LASER_COLLISION_MULTIPLIER);
+			// discount sum of radius
+			if (radius > laserRelativePos.norm()) {
+				std::cerr << "radius > laserRelativePos.norm() - collision?\n";
+				radius /= 2;
+			}
+			laserRelativePos -= laserRelativePos.normalized() * radius;
+
+			// repulsive force from lasers
+			resultantDanger += Force::Repulsive(laserRelativePos, LASER_MULTIPLIER, LASER_INFLUENCE);
+
+			// repulsive force if a collision is predicted
+			resultantMovement += LASER_COLLISION_MULTIPLIER * Force::Collision(laserRelativePos,
+				laserApproachSpeed, radius, LASER_COLLISION_INFLUENCE, laser.second->lifetime);
 		}
 	}
 
@@ -64,18 +84,25 @@ void ShibataBot::Process() {
 		double radius = rock.second->radius + myShip->radius;
 		rockApproachSpeed = rock.second->vel - myShip->vel;
 		rockRelativePos = rock.second->pos - myShip->pos;
-		resultantDanger += Force::Repulsive(rockRelativePos - rockRelativePos.normalized() * radius * .8, ROCK_MULTIPLIER, ROCK_INFLUENCE);
 
-		Force::Collision collision(rockRelativePos, rockApproachSpeed, radius, ROCK_COLLISION_INFLUENCE, 100);
-		resultantMovement += Force::Attractive(collision, ROCK_COLLISION_MULTIPLIER);
+		// discount sum of radius
+		if (radius > rockRelativePos.norm()) {
+			std::cerr << "radius > rockRelativePos.norm() - collision?\n";
+			radius /= 2;
+		}
+		resultantDanger += Force::Repulsive(rockRelativePos - rockRelativePos.normalized() * radius,
+			ROCK_MULTIPLIER, ROCK_INFLUENCE);
+
+		resultantMovement += ROCK_COLLISION_MULTIPLIER * Force::Collision(rockRelativePos,
+			rockApproachSpeed, radius, ROCK_COLLISION_INFLUENCE, 100);
 	}
 
-	resultantHeading += resultantDanger;
-	resultantMovement += resultantHeading;
-	resultantHeading = -resultantHeading;
+	resultantMovement += resultantDanger;
+	// resultantHeading = -resultantDanger;
 
 	GameObject* closest = NULL;
-	if (resultantDanger.squaredNorm() < ATTACK_THRESHOLD) {
+	if (resultantDanger.squaredNorm() < ATTACK_THRESHOLD || !closestShip) {
+		// No danger close, attack hostile lasers and rocks
 		for (auto rock : gamestate->rocks) {
 			double distance = (rock.second->pos - myShip->pos).squaredNorm();
 			if (distance < minDistance) {
@@ -84,63 +111,70 @@ void ShibataBot::Process() {
 			}
 		}
 		for (auto laser : gamestate->lasers) {
-			double distance = (laser.second->pos - myShip->pos).squaredNorm();
-			if (distance < minDistance) {
-				minDistance = distance;
-				closest = laser.second;
+			if (laser.second->owner != myShip->uid) {
+				double distance = (laser.second->pos - myShip->pos).squaredNorm();
+				if (distance < minDistance) {
+					minDistance = distance;
+					closest = laser.second;
+				}
 			}
 		}
 	} else
 		closest = closestShip;
 
-	// world to bot
+	// World to bot transformation
 	Eigen::Rotation2D<double> transformation(-myShip->ang);
 	Eigen::Vector2d unitDirection = {1, 0};
 	Eigen::Vector2d speedDiff;
+	// Unit ship direction
 	unitDirection = Eigen::Rotation2D<double>(myShip->ang) * unitDirection;
-	if (resultantMovement.squaredNorm() < 4.)
-		speedDiff = transformation * (resultantMovement - .8 * myShip->vel);
+	// Difference between desired and actual speed in bot coordinates
+	speedDiff = transformation * (resultantMovement - SPEED_THRUST_GAIN * myShip->vel);
+	double speedDiffAbs = abs(speedDiff[1]);	// lateral speed
+	thrust = speedDiff[0];						// forward speed
+
+	double shootSpeed;
+	if (shootTimer >= 30)
+		shootSpeed = 3.75;
+	else if (shootTimer >= 20)
+		shootSpeed = 2.5;
 	else
-		speedDiff = transformation * (resultantMovement - SPEED_THRUST_GAIN * myShip->vel);
-	double speedDiffAbs = abs(speedDiff[1]);
-	thrust = speedDiff[0];
+		shootSpeed = 1.25;
 
 	if (closest != NULL) {
+
 		Eigen::Vector3d closestD, closestV;
 		Eigen::Vector2d unitClosestD;
 		unitClosestD << (closest->pos - myShip->pos).normalized();
+
+		// Build a 3D vector and store relative tangential speed in Z with cross product
 		closestD << unitClosestD, 0;
 		closestV << closest->vel - myShip->vel, 0;
-		Eigen::Vector3d tangentSpeed = closestD.cross(closestV);
-		double shootSpeed;
-		if (shootTimer >= 30)
-			shootSpeed = 3.75;
-		else if (shootTimer >= 20)
-			shootSpeed = 2.5;
-		else
-			shootSpeed = 1.25;
-		double straightSpeed;
-		for (straightSpeed = -1.; straightSpeed < 0. && shootSpeed < 4.; shootSpeed += 1.25) {
-			straightSpeed = shootSpeed * shootSpeed - tangentSpeed.dot(tangentSpeed);
-		}
-		if (straightSpeed < 0)
-			straightSpeed = 0;
-		else
-			straightSpeed = std::sqrt(straightSpeed);
+		double tangentSpeed = closestD.cross(closestV)[2];	// Right hand rule = positive if counter clockwise
 
-		resultantHeading = unitClosestD * straightSpeed +
-			Eigen::Vector2d{-unitClosestD[1], unitClosestD[0]} * tangentSpeed[2];
+		// Build heading by desired shoot heading.
+		// Shoot speed = target tangential speed + shoot approach speed.
+		double approachSpeed;
+		double possibleShootSpeed = shootSpeed;
+		for (approachSpeed = 0.; approachSpeed == 0. && possibleShootSpeed < 4.; possibleShootSpeed += 1.25) {
+			approachSpeed = possibleShootSpeed * possibleShootSpeed - tangentSpeed * tangentSpeed;
+		}
+		approachSpeed = std::sqrt(approachSpeed);
+
+		// The loop might exit with approachSpeed = 0 if abs(tangentSpeed) > max. shootSpeed.
+		// Enemy tangential speed is too fast and the shoot won't reach, so we will position perpendicular to target.
+
+		// Eigen::Vector2d{-unitClosestD[1], unitClosestD[0]} = unit direction rotated +90°
+		resultantHeading = unitClosestD * approachSpeed +
+			Eigen::Vector2d{-unitClosestD[1], unitClosestD[0]} * tangentSpeed;
 	}
 
 	double thrustDiff, resultantDiffHeading;
-	if (resultantHeading.squaredNorm() > .2) {
-		resultantDiffHeading = fmod(myShip->ang - atan2(resultantHeading[1], resultantHeading[0]), 2. * M_PI);
-		if (resultantDiffHeading < -M_PI)
-			resultantDiffHeading += 2 * M_PI;
-		else if (resultantDiffHeading > M_PI)
-			resultantDiffHeading -= 2 * M_PI;
-	} else
-		resultantDiffHeading = 0;
+	resultantDiffHeading = fmod(myShip->ang - atan2(resultantHeading[1], resultantHeading[0]), 2. * M_PI);
+	if (resultantDiffHeading < -M_PI)
+		resultantDiffHeading += 2 * M_PI;
+	else if (resultantDiffHeading > M_PI)
+		resultantDiffHeading -= 2 * M_PI;
 
 	double correction = pd(resultantDiffHeading, myShip->velAng);
 	thrustDiff = (myShip->velAng - correction);	// @todo Revisar, -correction parece certo mas não funciona
@@ -172,25 +206,22 @@ void ShibataBot::Process() {
 	sideThrustBack = -thrustDiff - speedDiff[1];
 
 	GameObject shootObject;
-	double shootSpeed;
-	if (shootTimer >= 30)
-		shootSpeed = 75. / 20.;
-	else if (shootTimer >= 20)
-		shootSpeed = 50. / 20.;
-	else
-		shootSpeed = 25. / 20.;
-	shootObject.pos = myShip->pos;
-	shootObject.vel = unitDirection * shootSpeed + myShip->vel + myShip->velAng * 2 * (Eigen::Rotation2D<double>(M_PI_2) * unitDirection);
-	shootObject.radius = .5;
-	Simulation::Collision collision(shootObject, *gamestate);
-	if (collision.exists())
-		ticksFromGoodShoot = 0;
+	if (shootTimer >= 10) {
+		// If shooting is possible, check if it's worth it
+		shootObject.pos = myShip->pos;
+		shootObject.vel = unitDirection * shootSpeed + myShip->vel +
+			myShip->velAng * 2 * (Eigen::Rotation2D<double>(M_PI_2) * unitDirection);
+		shootObject.radius = .5;
 
-	if ((minDistance < 50. || ticksFromGoodShoot < 8) && shootTimer >= 10)
-		shoot = 3;
+		Simulation::Collision collision(shootObject, *gamestate);
+		if (collision.exists())
+			ticksFromGoodShoot = 0;
+		if ((minDistance < 20. || ticksFromGoodShoot < 8))
+			shoot = 3;
+	}
 	if (!shoot)
 		shootTimer++;
 	else
-		shootTimer = 0;
+		shootTimer = 1;
 	ticksFromGoodShoot++;
 }

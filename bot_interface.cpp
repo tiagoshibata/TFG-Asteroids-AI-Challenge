@@ -110,7 +110,7 @@ void GameState::ParseData(string toParse)
 			ssr >> charge;
 			ssr >> score;
 			ang = ang * M_PI / 180 + M_PI_2; // fmod(ang / 180 * M_PI + M_PI_2, 2 * M_PI); facilita leitura
-			velAng = velAng * M_PI / 180 / 20;
+			velAng = velAng * M_PI / 180 * timeStep; /// @todo check if velAng was originally per tick or per second
 
 			shipIds.push_back(uid);
 
